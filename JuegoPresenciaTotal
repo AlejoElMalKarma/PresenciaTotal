@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Presencia Total – Prototype (3 jugadores)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center p-6">
+  <h1 class="text-2xl font-bold mb-4">🧘 Presencia Total – Proto 3 Jugadores</h1>
+
+  <div class="flex gap-6 mb-6">
+    <div class="p-4 bg-white rounded-xl shadow w-52 text-center">
+      <h2 class="font-semibold">Llamas (Ego)</h2>
+      <div id="flames" class="text-3xl font-bold text-red-600">0</div>
+      <div class="text-sm">/ 15</div>
+    </div>
+    <div class="p-4 bg-white rounded-xl shadow w-52 text-center">
+      <h2 class="font-semibold">Mandala</h2>
+      <div id="mandala" class="text-3xl font-bold text-emerald-600">0</div>
+      <div class="text-sm">/ 9</div>
+    </div>
+  </div>
+
+  <div id="eventCard" class="hidden flex-col items-center bg-white p-6 rounded-xl shadow-md mb-6 w-96 text-center">
+    <span class="text-sm uppercase tracking-wide text-gray-500">Evento del Ego</span>
+    <h3 id="eventName" class="text-xl font-semibold my-2"></h3>
+    <p id="eventFlames" class="text-red-600 text-4xl font-bold"></p>
+    <p id="eventDesc" class="text-gray-800 mt-3 text-sm whitespace-pre-line"></p>
+  </div>
+
+  <div id="playersArea" class="hidden flex flex-col gap-4 mb-6 w-full max-w-md"></div>
+  <div id="log" class="w-full max-w-xl space-y-2"></div>
+  <button id="startBtn" class="mt-8 px-6 py-3 bg-orange-500 text-white text-lg rounded-xl shadow">Iniciar partida</button>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const PLAYER_COUNT = 3;
+    const MAX_FLAMES = 15;
+    const MAX_MANDALA = 9;
+
+    const EVENTS = [
+      { name: 'Correo urgente del jefe', flames: 2, desc: 'Ej.: a las 17:45 te piden un informe para “ya”.\nActuar = abrir de inmediato el correo y responder aceleradamente.\nNo actuar = inhalar profundo, priorizar y responder tras 60 s de presencia.' },
+      { name: 'Recuerdo incómodo', flames: 1, desc: 'Ej.: evocación repentina de un error pasado.\nActuar = rumiar la situación y criticarte mentalmente.\nNo actuar = notar el pensamiento, soltarlo y volver al ahora con la respiración.' },
+      { name: 'Reunión adelantada', flames: 3, desc: 'Ej.: la call empieza 15 min antes de lo previsto.\nActuar = correr a conectarte sin centrarte.\nNo actuar = aceptar el cambio, respirar 60 s y entrar con calma.' },
+      { name: 'Crítica pública', flames: 2, desc: 'Ej.: te señalan un fallo delante del equipo.\nActuar = defenderte o atacar al instante.\nNo actuar = escuchar la crítica, sentir la emoción y responder después de un pausa consciente.' },
+      { name: 'Plazo imposible', flames: 3, desc: 'Ej.: entregable de 3 días reducido a 24 h.\nActuar = entrar en pánico y trabajar sin plan.\nNo actuar = anclarte al presente, dividir tareas y negociar si es necesario.' },
+      { name: 'Notificación constante', flames: 2, desc: 'Ej.: el móvil vibra sin parar con mensajes.\nActuar = revisar inmediatamente el móvil.\nNo actuar = enfocarme en lo que sucede y respirar 60 s antes de mirar.' },
+      { name: 'Error inesperado', flames: 2, desc: 'Ej.: se cae la conexión justo antes de presentar.\nActuar = quejarte y maldecir al equipo de TI.\nNo actuar = aceptar el hecho, respirar y buscar alternativas con claridad.' }
+    ];
+
+    let flames = 0;
+    let mandala = 0;
+    let deck = [];
+    let currentEvent = null;
+    let votes = new Array(PLAYER_COUNT).fill(null);
+
+    const flamesEl = document.getElementById('flames');
+    const mandalaEl = document.getElementById('mandala');
+    const eventCardEl = document.getElementById('eventCard');
+    const eventNameEl = document.getElementById('eventName');
+    const eventFlamesEl = document.getElementById('eventFlames');
+    const eventDescEl = document.getElementById('eventDesc');
+    const playersArea = document.getElementById('playersArea');
+    const logEl = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+
+    const shuffle = arr => arr.sort(() => Math.random() - 0.5);
+    const drawEvent = () => { if (!deck.length) deck = shuffle([...EVENTS]); return deck.pop(); };
+    const updateUI = () => { flamesEl.textContent = flames; mandalaEl.textContent = mandala; };
+    const log = msg => { const p = document.createElement('p'); p.textContent = msg; logEl.prepend(p); };
+
+    const buildPlayerRows = () => {
+      playersArea.innerHTML = '';
+      for (let i = 0; i < PLAYER_COUNT; i++) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-white p-3 rounded-xl shadow';
+        row.dataset.idx = i;
+        row.innerHTML = `<span class="font-semibold">Jugador ${i + 1}</span><div class="flex gap-2"><button class="vote act px-3 py-1 rounded bg-indigo-600 text-white" data-choice="ACT">Actuar</button><button class="vote noact px-3 py-1 rounded bg-emerald-600 text-white" data-choice="NO_ACT">No actuar</button></div>`;
+        playersArea.appendChild(row);
+      }
+    };
+
+    const lockRow = row => { row.querySelectorAll('button').forEach(b => { b.disabled = true; b.classList.add('opacity-50'); }); };
+
+    const startTurn = () => {
+      if (flames >= MAX_FLAMES) { log('☠️ El Ego ganó. Juego terminado.'); startBtn.classList.remove('hidden'); playersArea.classList.add('hidden'); return; }
+      if (mandala >= MAX_MANDALA) { log('🏆 Victoria consciente. Llegaron al Ahora.'); startBtn.classList.remove('hidden'); playersArea.classList.add('hidden'); return; }
+
+      currentEvent = drawEvent();
+      eventNameEl.textContent = currentEvent.name;
+      eventFlamesEl.textContent = `🔥×${currentEvent.flames}`;
+      eventDescEl.textContent = currentEvent.desc;
+      eventCardEl.classList.remove('hidden');
+      playersArea.classList.remove('hidden');
+
+      votes.fill(null);
+      playersArea.querySelectorAll('div[data-idx]').forEach(row => { row.querySelectorAll('button').forEach(btn => { btn.disabled = false; btn.classList.remove('opacity-50'); }); });
+    };
+
+    const resolveVotes = () => {
+      if (votes.every(v => v === 'NO_ACT')) { log('✨ No‑acción colectiva. Evento se disuelve.'); mandala += 1; }
+      else { flames += currentEvent.flames; log(`🔥 Alguien actuó → el Ego suma ${currentEvent.flames} llamas (total ${flames}/${MAX_FLAMES})`); }
+      updateUI();
+      setTimeout(startTurn, 1200);
+    };
+
+    playersArea.addEventListener('click', e => {
+      const btn = e.target.closest('button.vote'); if (!btn) return;
+      const row = btn.closest('div[data-idx]'); const idx = Number(row.dataset.idx);
+      if (votes[idx] !== null) return;
+      votes[idx] = btn.dataset.choice; lockRow(row);
+      if (votes.every(v => v !== null)) resolveVotes();
+    });
+
+    startBtn.addEventListener('click', () => {
+      flames = 0;
+      mandala = 0;
+      deck = shuffle([...EVENTS]);
+      logEl.innerHTML = '';
+      updateUI();
+      startBtn.classList.add('hidden');
+      buildPlayerRows();
+      startTurn();
+    });
+  });
+</script>
+</body>
+</html>
